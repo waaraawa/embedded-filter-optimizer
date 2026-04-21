@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unified AMQ (Approximate Membership Query) Optimizer</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .podium {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .filter-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .filter-card h3 {
+            margin-top: 0;
+            color: #f8fafc;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+        }
+
+        .filter-card .metric {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #f8fafc;
+            margin-bottom: 0.5rem;
+        }
+
+        .filter-card .sub-metric {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-bottom: 1rem;
+        }
+
+        .filter-card::before {
+            content: attr(data-badge);
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .filter-card[data-badge]::before {
+            opacity: 1;
+        }
+
+        .filter-card.disqualified {
+            border-color: rgba(244, 63, 94, 0.3);
+            background: rgba(244, 63, 94, 0.02);
+        }
+
+        .filter-card.disqualified .metric {
+            color: #f43f5e !important;
+            font-size: 1.5rem;
+            text-decoration: line-through;
+            opacity: 0.7;
+        }
+
+        .filter-card.disqualified::before {
+            background: #991b1b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .filter-card.rank-2 {
+            border-color: rgba(96, 165, 250, 0.4);
+            background: rgba(96, 165, 250, 0.02);
+        }
+
+        .filter-card.rank-2::before {
+            background: #3b82f6;
+        }
+
+        .filter-card.rank-3 {
+            border-color: rgba(251, 146, 60, 0.4);
+            background: rgba(251, 146, 60, 0.02);
+        }
+
+        .filter-card.rank-3::before {
+            background: #f97316;
+        }
+
+        .filter-card.winner {
+            border-color: rgba(16, 185, 129, 0.6);
+            background: rgba(16, 185, 129, 0.08);
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+            transform: scale(1.02);
+            z-index: 10;
+        }
+
+        .filter-card.winner::before {
+            background: #10b981;
+        }
+
+        .local-tuning {
+            margin-top: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.6rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            color: #cbd5e1;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .local-tuning label {
+            margin-bottom: 0;
+            cursor: default;
+            white-space: nowrap;
+        }
+
+        .local-tuning input,
+        .local-tuning select {
+            width: 75px;
+            padding: 0.2rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+            color: white;
+            font-size: 0.8rem;
+            text-align: center;
+            outline: none;
+        }
+
+        .local-tuning input::placeholder {
+            color: #64748b;
+        }
+
+        .local-tuning select option {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+
+        .toggle-group {
+            display: flex;
+            align-items: center;
+            margin-top: 1rem;
+            padding: 0.8rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .toggle-group:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .toggle-group input {
+            width: 18px;
+            height: 18px;
+            margin-right: 15px;
+            cursor: pointer;
+            accent-color: #38bdf8;
+        }
+
+        .toggle-group label {
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 0;
+            color: #cbd5e1;
+        }
+
+        /* Hide number input spinners */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            appearance: none;
+            margin: 0;
+        }
+
+        input[type=number] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background-effects">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+    </div>
+
+    <div class="container" style="max-width: 1200px;">
+        <header style="text-align: center; margin-bottom: 2rem;">
+            <h1
+                style="margin-bottom: 0.5rem; background: linear-gradient(to right, #60a5fa, #a78bfa); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">
+                Unified AMQ (Approximate Membership Query) Optimizer</h1>
+            <p style="color: #94a3b8;">Compare Bloom, Cuckoo, and XOR Filters under hardware constraints.</p>
+        </header>
+
+        <main class="dashboard" style="grid-template-columns: 350px 1fr; gap: 2rem;">
+            <!-- Setup Column -->
+            <div class="left-column">
+                <section class="card input-section" style="padding: 1.5rem;">
+                    <h2>Requirements</h2>
+
+                    <div class="input-group">
+                        <label for="n-input">Data Scale (n)</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="n-input" value="100000000" min="1" step="10000000">
+                            <span class="unit" id="n-unit-display"></span>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="p-input">Target FPR (p)</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="p-input" value="0.01" step="0.001" min="0.000001" max="0.99">
+                            <span class="unit" id="p-unit-display"></span>
+                        </div>
+                    </div>
+
+                    <h3
+                        style="margin-top: 2rem; color: #cbd5e1; font-size: 1.0rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;">
+                        Operational Needs</h3>
+
+                    <div class="toggle-group" id="t-add-grp">
+                        <input type="checkbox" id="need-add" checked onchange="updateUI()">
+                        <label for="need-add">Runtime Insertion</label>
+                    </div>
+
+                    <div class="toggle-group" id="t-del-grp">
+                        <input type="checkbox" id="need-delete" onchange="updateUI()">
+                        <label for="need-delete">Runtime Deletion</label>
+                    </div>
+
+                    <button class="btn-primary"
+                        style="width:100%; padding: 1rem; font-size: 1.05rem; border-radius: 8px; margin-top: 2rem; cursor: pointer; transition: all 0.2s;"
+                        onclick="updateUI()">Evaluate Architectures</button>
+                </section>
+            </div>
+
+            <!-- Dashboard Results Column -->
+            <div class="right-column">
+                <div class="podium" id="podium-container">
+                    <!-- Bloom -->
+                    <div class="filter-card" id="card-bloom">
+                        <h3 style="color: #c084fc;">Bloom Filter</h3>
+                        <div class="metric" id="bloom-mem" style="color: #e2e8f0;">--</div>
+                        <div class="sub-metric" id="bloom-bpi">Bits/item: --</div>
+                        <div class="sub-metric" id="bloom-config" style="color: #cbd5e1; margin-bottom: 0;">Hash ops
+                            (k): --</div>
+                        <p id="bloom-status"
+                            style="font-size: 0.8rem; color: #94a3b8; margin-top: 1rem; margin-bottom: 0.5rem;">Supports
+                            Add.<br>Cannot Delete.</p>
+
+                        <div class="local-tuning" style="margin-top: auto;">
+                            <label>Hash Ops (k):</label>
+                            <input type="number" id="bloom-k-override" placeholder="Auto" min="1" max="30"
+                                oninput="updateUI()">
+                        </div>
+                    </div>
+
+                    <!-- Cuckoo -->
+                    <div class="filter-card" id="card-cuckoo">
+                        <h3 style="color: #38bdf8;">Cuckoo Filter</h3>
+                        <div class="metric" id="cuckoo-mem" style="color: #e2e8f0;">--</div>
+                        <div class="sub-metric" id="cuckoo-bpi">Bits/item: --</div>
+                        <div class="sub-metric" id="cuckoo-config" style="color: #cbd5e1; margin-bottom: 0;">Fingerprint
+                            (f): --</div>
+                        <p id="cuckoo-status"
+                            style="font-size: 0.8rem; color: #94a3b8; margin-top: 1rem; margin-bottom: 0.5rem;">Supports
+                            Add/Delete.<br>Fails when full.</p>
+
+                        <div class="local-tuning" style="margin-top: auto;">
+                            <label>Bucket Size (b):</label>
+                            <select id="cuckoo-b-override" onchange="updateUI()">
+                                <option value="NaN" selected>Auto</option>
+                                <option value="2">2 (~84%)</option>
+                                <option value="4">4 (~95%)</option>
+                                <option value="8">8 (~98%)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- XOR -->
+                    <div class="filter-card" id="card-xor">
+                        <h3 style="color: #34d399;">XOR Filter</h3>
+                        <div class="metric" id="xor-mem" style="color: #e2e8f0;">--</div>
+                        <div class="sub-metric" id="xor-bpi">Bits/item: --</div>
+                        <div class="sub-metric" id="xor-config" style="color: #cbd5e1; margin-bottom: 0;">Fingerprint
+                            (f): --</div>
+                        <p id="xor-status"
+                            style="font-size: 0.8rem; color: #94a3b8; margin-top: 1rem; margin-bottom: 0.5rem;">Static /
+                            Read-only.<br>Cannot Add/Delete.</p>
+
+                        <div class="local-tuning" style="margin-top: auto;">
+                            <label>Alignment (f):</label>
+                            <select id="xor-f-override" onchange="updateUI()">
+                                <option value="NaN" selected>Auto</option>
+                                <option value="8">8-bit</option>
+                                <option value="16">16-bit</option>
+                                <option value="32">32-bit</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <section class="card chart-section" style="padding: 1.5rem; display: flex; flex-direction: column;">
+                    <h2 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Bits per Item vs FPR Accuracy</h2>
+                    <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 1rem;">Comparison of theoretical
+                        density. Lower lines are more memory-efficient.</p>
+                    <div class="canvas-wrapper" style="height: 320px; position: relative;">
+                        <canvas id="compChart"></canvas>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="optimizer.js"></script>
+    <script>
+        document.getElementById('t-add-grp').onclick = function (e) {
+            if (e.target.tagName !== 'INPUT') { document.getElementById('need-add').click(); }
+        }
+        document.getElementById('t-del-grp').onclick = function (e) {
+            if (e.target.tagName !== 'INPUT') { document.getElementById('need-delete').click(); }
+        }
+    </script>
+</body>
+
+</html>
