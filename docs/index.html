@@ -209,7 +209,7 @@
         <div class="glow-orb orb-2"></div>
     </div>
 
-    <div class="container" style="max-width: 1200px;">
+    <div class="container" style="max-width: 1500px; width: 98%;">
         <header style="text-align: center; margin-bottom: 2rem;">
             <h1
                 style="margin-bottom: 0.5rem; background: linear-gradient(to right, #60a5fa, #a78bfa); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">
@@ -217,7 +217,7 @@
             <p style="color: #94a3b8;">Compare Bloom, Cuckoo, and XOR Filters under hardware constraints.</p>
         </header>
 
-        <main class="dashboard" style="grid-template-columns: 350px 1fr; gap: 2rem;">
+        <main class="dashboard" style="grid-template-columns: 300px 1fr; gap: 2rem;">
             <!-- Setup Column -->
             <div class="left-column">
                 <section class="card input-section" style="padding: 1.5rem;">
@@ -269,6 +269,7 @@
                         <div class="sub-metric" id="bloom-bpi">Bits/item: --</div>
                         <div class="sub-metric" id="bloom-config" style="color: #cbd5e1; margin-bottom: 0;">Hash ops
                             (k): --</div>
+                        <div class="sub-metric" id="bloom-fpr" style="color: #fcd34d; margin-top: 0.25rem; font-size: 0.85rem; margin-bottom: 0;">Actual FPR: --</div>
                         <p id="bloom-status"
                             style="font-size: 0.8rem; color: #94a3b8; margin-top: 1rem; margin-bottom: 0.5rem;">Supports
                             Add.<br>Cannot Delete.</p>
@@ -287,6 +288,7 @@
                         <div class="sub-metric" id="cuckoo-bpi">Bits/item: --</div>
                         <div class="sub-metric" id="cuckoo-config" style="color: #cbd5e1; margin-bottom: 0;">Fingerprint
                             (f): --</div>
+                        <div class="sub-metric" id="cuckoo-fpr" style="color: #fcd34d; margin-top: 0.25rem; font-size: 0.85rem; margin-bottom: 0;">Actual FPR: --</div>
                         <p id="cuckoo-status"
                             style="font-size: 0.8rem; color: #94a3b8; margin-top: 1rem; margin-bottom: 0.5rem;">Supports
                             Add/Delete.<br>Fails when full.</p>
@@ -309,6 +311,7 @@
                         <div class="sub-metric" id="xor-bpi">Bits/item: --</div>
                         <div class="sub-metric" id="xor-config" style="color: #cbd5e1; margin-bottom: 0;">Fingerprint
                             (f): --</div>
+                        <div class="sub-metric" id="xor-fpr" style="color: #fcd34d; margin-top: 0.25rem; font-size: 0.85rem; margin-bottom: 0;">Actual FPR: --</div>
                         <p id="xor-status"
                             style="font-size: 0.8rem; color: #94a3b8; margin-top: 1rem; margin-bottom: 0.5rem;">Static /
                             Read-only.<br>Cannot Add/Delete.</p>
@@ -326,11 +329,40 @@
                 </div>
 
                 <section class="card chart-section" style="padding: 1.5rem; display: flex; flex-direction: column;">
-                    <h2 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Bits per Item vs FPR Accuracy</h2>
-                    <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 1rem;">Comparison of theoretical
-                        density. Lower lines are more memory-efficient.</p>
-                    <div class="canvas-wrapper" style="height: 320px; position: relative;">
-                        <canvas id="compChart"></canvas>
+                    <div class="chart-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                        <div class="chart-titles">
+                            <h2 id="chart-main-title" style="font-size: 1.1rem; margin-bottom: 0.25rem;">Bits per Item vs FPR Accuracy</h2>
+                            <p id="chart-main-desc" style="color: #64748b; font-size: 0.85rem; margin-bottom: 0;">Comparison of theoretical density. Lower lines are more memory-efficient.</p>
+                        </div>
+                        <div class="chart-tabs" style="display: flex; gap: 0.5rem; background: rgba(0,0,0,0.2); padding: 0.25rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                            <button class="tab-btn active" data-target="unified">Unified</button>
+                            <button class="tab-btn" data-target="Bloom">Bloom</button>
+                            <button class="tab-btn" data-target="Cuckoo">Cuckoo</button>
+                            <button class="tab-btn" data-target="XOR">XOR</button>
+                        </div>
+                    </div>
+                    
+                    <div id="view-unified" class="chart-view active" style="flex: 1; display: flex; flex-direction: column; min-height: 320px;">
+                        <div class="canvas-wrapper" style="flex: 1; position: relative; height: auto;">
+                            <canvas id="compChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div id="view-detail" class="chart-view" style="display: none; flex: 1; flex-direction: column; min-height: 320px;">
+                        <div class="detail-charts-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; flex: 1;">
+                            <div class="canvas-wrapper detail-wrapper" style="display: flex; flex-direction: column; position: relative; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 0.5rem; height: auto;">
+                                <h4 style="text-align:center; font-size: 0.8rem; color:#cbd5e1; margin-bottom: 0.5rem; font-weight: normal; flex-shrink: 0;">FPR vs Data Scale (n)</h4>
+                                <div style="position: relative; flex: 1; min-height: 150px;"><canvas id="detail-n-chart"></canvas></div>
+                            </div>
+                            <div class="canvas-wrapper detail-wrapper" style="display: flex; flex-direction: column; position: relative; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 0.5rem; height: auto;">
+                                <h4 style="text-align:center; font-size: 0.8rem; color:#cbd5e1; margin-bottom: 0.5rem; font-weight: normal; flex-shrink: 0;">FPR vs Memory (m)</h4>
+                                <div style="position: relative; flex: 1; min-height: 150px;"><canvas id="detail-m-chart"></canvas></div>
+                            </div>
+                            <div class="canvas-wrapper detail-wrapper" style="display: flex; flex-direction: column; position: relative; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 0.5rem; height: auto;">
+                                <h4 id="detail-param-title" style="text-align:center; font-size: 0.8rem; color:#cbd5e1; margin-bottom: 0.5rem; font-weight: normal; flex-shrink: 0;">FPR vs Parameter</h4>
+                                <div style="position: relative; flex: 1; min-height: 150px;"><canvas id="detail-param-chart"></canvas></div>
+                            </div>
+                        </div>
                     </div>
                 </section>
             </div>

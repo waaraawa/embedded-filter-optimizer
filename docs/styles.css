@@ -75,7 +75,8 @@ body {
 }
 
 .container {
-    max-width: 1100px;
+    max-width: 1500px;
+    width: 98%;
     margin: 0 auto;
     padding: 2rem;
 }
@@ -168,21 +169,40 @@ input[type="number"]:focus {
 }
 
 .input-with-unit {
-    position: relative;
     display: flex;
     align-items: center;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    padding-right: 1rem;
+}
+
+.input-with-unit:focus-within {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
 }
 
 .input-with-unit input {
-    padding-right: 125px;
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    padding-right: 0;
+}
+
+.input-with-unit input:focus {
+    outline: none;
+    border: none;
+    box-shadow: none;
 }
 
 .unit {
-    position: absolute;
-    right: 1rem;
     color: var(--accent-purple);
     font-size: 0.85rem;
     font-weight: 600;
+    white-space: nowrap;
+    padding-left: 0.5rem;
 }
 
 /* Buttons */
@@ -362,5 +382,42 @@ button:hover {
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+/* Tabs */
+.tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 0.4rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+}
+
+.tab-btn.active {
+    background: var(--accent-blue);
+    color: white;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+}
+
+.tab-btn[data-target="Bloom"].active { background: #c084fc; box-shadow: 0 0 10px rgba(192, 132, 252, 0.3); }
+.tab-btn[data-target="Cuckoo"].active { background: #38bdf8; box-shadow: 0 0 10px rgba(56, 189, 248, 0.3); }
+.tab-btn[data-target="XOR"].active { background: #34d399; box-shadow: 0 0 10px rgba(52, 211, 153, 0.3); }
+
+@media (max-width: 768px) {
+    .detail-charts-grid {
+        grid-template-columns: 1fr !important;
+        height: auto !important;
+    }
+    .detail-wrapper {
+        height: 250px;
     }
 }

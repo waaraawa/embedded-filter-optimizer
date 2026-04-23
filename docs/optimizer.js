@@ -10,15 +10,21 @@ function formatBytes(bits) {
 
 function formatNumber(num) {
     if (isNaN(num) || num === null) return "";
-    let str = num.toLocaleString('en-US');
-    if (num >= 1000000000) return str + " (" + (num / 1000000000).toFixed(1) + " B)";
-    if (num >= 1000000) return str + " (" + (num / 1000000).toFixed(1) + " M)";
-    if (num >= 1000) return str + " (" + (num / 1000).toFixed(1) + " K)";
-    return str;
+    if (num >= 1e18) return (num / 1e18).toFixed(1) + " Qi";
+    if (num >= 1e15) return (num / 1e15).toFixed(1) + " Qa";
+    if (num >= 1e12) return (num / 1e12).toFixed(1) + " T";
+    if (num >= 1e9)  return (num / 1e9).toFixed(1) + " B";
+    if (num >= 1e6)  return (num / 1e6).toFixed(1) + " M";
+    if (num >= 1e3)  return (num / 1e3).toFixed(1) + " K";
+    return num.toLocaleString('en-US');
 }
 
 // Global Chart Instance
 let compChart = null;
+let detailNChart = null;
+let detailMChart = null;
+let detailParamChart = null;
+let currentTab = 'unified';
 
 // DOM Access
 const nInput = document.getElementById('n-input');
@@ -29,16 +35,19 @@ const tDel = document.getElementById('need-delete');
 const outBloomMem = document.getElementById('bloom-mem');
 const outBloomBPI = document.getElementById('bloom-bpi');
 const outBloomConfig = document.getElementById('bloom-config');
+const outBloomFPR = document.getElementById('bloom-fpr');
 const cardBloom = document.getElementById('card-bloom');
 
 const outCuckooMem = document.getElementById('cuckoo-mem');
 const outCuckooBPI = document.getElementById('cuckoo-bpi');
 const outCuckooConfig = document.getElementById('cuckoo-config');
+const outCuckooFPR = document.getElementById('cuckoo-fpr');
 const cardCuckoo = document.getElementById('card-cuckoo');
 
 const outXorMem = document.getElementById('xor-mem');
 const outXorBPI = document.getElementById('xor-bpi');
 const outXorConfig = document.getElementById('xor-config');
+const outXorFPR = document.getElementById('xor-fpr');
 const cardXor = document.getElementById('card-xor');
 
 function evaluateBloom(n, p, needAdd, needDel, kOverride) {
@@ -53,7 +62,9 @@ function evaluateBloom(n, p, needAdd, needDel, kOverride) {
         bpi = -k / Math.log(1 - Math.pow(p, 1 / k));
     }
     const mem = Math.ceil(n * bpi);
-    return { name: "Bloom", valid, bpi, mem, config: "k=" + k, error: valid ? "" : "Cannot Delete" };
+    let actualBPI = mem / n;
+    let fpr = Math.pow(1 - Math.exp(-k / actualBPI), k);
+    return { name: "Bloom", valid, bpi: actualBPI, mem, config: "k=" + k, fpr, error: valid ? "" : "Cannot Delete" };
 }
 
 function evaluateCuckoo(n, p, needAdd, needDel, bOverride) {
@@ -68,7 +79,8 @@ function evaluateCuckoo(n, p, needAdd, needDel, bOverride) {
     const f = Math.ceil(Math.log2((2 * b) / p));
     const bpi = f / alpha;
     const mem = Math.ceil(n * bpi);
-    return { name: "Cuckoo", valid, bpi, mem, config: "f=" + f, error: "" };
+    let fpr = (2 * b) / Math.pow(2, f);
+    return { name: "Cuckoo", valid, bpi, mem, config: "f=" + f, fpr, error: "" };
 }
 
 function evaluateXor(n, p, needAdd, needDel, fOverride) {
@@ -81,14 +93,15 @@ function evaluateXor(n, p, needAdd, needDel, fOverride) {
     }
     const bpi = 1.23 * f;
     const mem = Math.ceil(n * bpi);
+    let fpr = Math.pow(2, -f);
 
     let configStr = "f=" + f;
     if (f < autoF) configStr += " (⚠️ High FPR)";
 
-    return { name: "XOR", valid, bpi, mem, config: configStr, error: valid ? "" : "Static Only" };
+    return { name: "XOR", valid, bpi, mem, config: configStr, fpr, error: valid ? "" : "Static Only" };
 }
 
-function updateCard(card, outMem, outBPI, outConfig, evalResult, isManual) {
+function updateCard(card, outMem, outBPI, outConfig, outFPR, evalResult, isManual) {
     card.classList.remove('winner', 'disqualified', 'rank-2', 'rank-3');
     card.removeAttribute('data-badge');
 
@@ -97,6 +110,9 @@ function updateCard(card, outMem, outBPI, outConfig, evalResult, isManual) {
 
     const prefix = isManual ? "Manual " : "Optimal ";
     outConfig.innerText = prefix + evalResult.config;
+
+    let percentFPR = evalResult.fpr * 100;
+    outFPR.innerText = "Actual FPR: " + (percentFPR < 0.0001 ? percentFPR.toExponential(2) : percentFPR.toPrecision(4)) + "%";
 
     if (!evalResult.valid) {
         card.classList.add('disqualified');
@@ -121,9 +137,9 @@ function updateUI() {
     let rCuckoo = evaluateCuckoo(n, p, needAdd, needDel, bOverride);
     let rXor = evaluateXor(n, p, needAdd, needDel, fOverride);
 
-    updateCard(cardBloom, outBloomMem, outBloomBPI, outBloomConfig, rBloom, !isNaN(kOverride));
-    updateCard(cardCuckoo, outCuckooMem, outCuckooBPI, outCuckooConfig, rCuckoo, !isNaN(bOverride));
-    updateCard(cardXor, outXorMem, outXorBPI, outXorConfig, rXor, !isNaN(fOverride));
+    updateCard(cardBloom, outBloomMem, outBloomBPI, outBloomConfig, outBloomFPR, rBloom, !isNaN(kOverride));
+    updateCard(cardCuckoo, outCuckooMem, outCuckooBPI, outCuckooConfig, outCuckooFPR, rCuckoo, !isNaN(bOverride));
+    updateCard(cardXor, outXorMem, outXorBPI, outXorConfig, outXorFPR, rXor, !isNaN(fOverride));
 
     // Pick Winner (Valid + Lowest Mem)
     let candidates = [rBloom, rCuckoo, rXor].filter(c => c.valid);
@@ -147,7 +163,11 @@ function updateUI() {
         }
     });
 
-    drawComparisonChart();
+    if (currentTab === 'unified') {
+        drawComparisonChart();
+    } else {
+        drawDetailCharts(currentTab);
+    }
 }
 
 function drawComparisonChart() {
@@ -300,15 +320,244 @@ function drawComparisonChart() {
     if (!el) return;
     el.addEventListener('input', () => {
         if (el.id === 'n-input') {
-            document.getElementById('n-unit-display').innerText = formatNumber(parseFloat(el.value));
+            let val = parseFloat(el.value);
+            if (!isNaN(val)) {
+                document.getElementById('n-unit-display').innerText = formatNumber(val);
+            } else {
+                document.getElementById('n-unit-display').innerText = '';
+            }
         } else if (el.id === 'p-input') {
-            document.getElementById('p-unit-display').innerText = (parseFloat(el.value) * 100).toPrecision(6) + '%';
+            let valStr = el.value;
+            // 입력되는 즉시 6자리 초과 소수점 자르기
+            if (valStr.includes('.')) {
+                let parts = valStr.split('.');
+                if (parts[1].length > 6) {
+                    el.value = parts[0] + '.' + parts[1].substring(0, 6);
+                }
+            }
+            // 0.99를 초과하는 값 입력 즉시 차단
+            let val = parseFloat(el.value);
+            if (!isNaN(val) && val > 0.99) {
+                el.value = "0.99";
+                val = 0.99;
+            }
+            
+            if (!isNaN(val)) {
+                document.getElementById('p-unit-display').innerText = (val * 100).toPrecision(6) + '%';
+            } else {
+                document.getElementById('p-unit-display').innerText = '';
+            }
+        }
+    });
+    el.addEventListener('change', () => {
+        if (el.id === 'p-input') {
+            let val = parseFloat(el.value);
+            if (isNaN(val)) val = 0.01;
+            if (val > 0.99) val = 0.99;
+            if (val < 0.000001) val = 0.000001;
+            // Prevent excessively long decimals (e.g., restrict to 6 decimal places max for FPR)
+            val = Number(val.toFixed(6));
+            el.value = val;
+            updateUI();
+        } else if (el.id === 'n-input') {
+            let val = parseFloat(el.value);
+            if (isNaN(val) || val < 1) val = 100000000;
+            val = Math.round(val);
+            
+            // 1B 이상이면 지수 표기법으로 변환, 아니면 일반 숫자 표기
+            if (val >= 1000000000) {
+                let expStr = val.toExponential();
+                // '1e+10' 형식에서 '+'를 제거하여 더 깔끔한 '1e10' 형태로 만듦
+                el.value = expStr.replace('+', '');
+            } else {
+                el.value = val;
+            }
+            updateUI();
         }
     });
     el.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') updateUI();
     });
 });
+
+// Tab Switch Logic
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        
+        currentTab = e.target.getAttribute('data-target');
+        
+        const unifiedView = document.getElementById('view-unified');
+        const detailView = document.getElementById('view-detail');
+        const mainTitle = document.getElementById('chart-main-title');
+        const mainDesc = document.getElementById('chart-main-desc');
+        const paramTitle = document.getElementById('detail-param-title');
+        
+        if (currentTab === 'unified') {
+            unifiedView.style.display = 'flex';
+            detailView.style.display = 'none';
+            mainTitle.innerText = "Bits per Item vs FPR Accuracy";
+            mainDesc.innerText = "Comparison of theoretical density. Lower lines are more memory-efficient.";
+        } else {
+            unifiedView.style.display = 'none';
+            detailView.style.display = 'flex';
+            mainTitle.innerText = currentTab + " Filter Deep Dive";
+            mainDesc.innerText = "Explore how FPR changes across different parameters.";
+            
+            if (currentTab === 'Bloom') paramTitle.innerText = "FPR vs Hash Ops (k)";
+            else if (currentTab === 'Cuckoo') paramTitle.innerText = "FPR vs Bucket Size (b)";
+            else if (currentTab === 'XOR') paramTitle.innerText = "FPR vs Fingerprint (f)";
+        }
+        
+        updateUI();
+    });
+});
+
+function drawDetailCharts(filterType) {
+    let baseN = parseFloat(nInput.value) || 100000000;
+    let baseP = parseFloat(pInput.value) || 0.01;
+    let needAdd = tAdd.checked;
+    let needDel = tDel.checked;
+    
+    let kOverride = parseInt(document.getElementById('bloom-k-override').value);
+    let bOverride = parseInt(document.getElementById('cuckoo-b-override').value);
+    let fOverride = parseInt(document.getElementById('xor-f-override').value);
+    
+    // Evaluate base values to find fixed M and Param
+    let baseEval;
+    let fixedParam;
+    if (filterType === 'Bloom') {
+        baseEval = evaluateBloom(baseN, baseP, needAdd, needDel, kOverride);
+        fixedParam = baseEval.config.replace('k=', '');
+    } else if (filterType === 'Cuckoo') {
+        baseEval = evaluateCuckoo(baseN, baseP, needAdd, needDel, bOverride);
+        fixedParam = bOverride || 4; // base b
+    } else if (filterType === 'XOR') {
+        baseEval = evaluateXor(baseN, baseP, needAdd, needDel, fOverride);
+        fixedParam = baseEval.config.split(' ')[0].replace('f=', '');
+    }
+    
+    let fixedM = baseEval.mem;
+    fixedParam = parseFloat(fixedParam);
+
+    // Common chart options
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { 
+                type: 'logarithmic',
+                title: { display: true, text: 'Actual FPR (Log)', font: { size: 11 } },
+                grid: { color: 'rgba(255,255,255,0.05)' },
+                ticks: {
+                    callback: function(value) {
+                        return value.toExponential(0);
+                    }
+                }
+            }
+        },
+        plugins: { legend: { display: false } }
+    };
+    
+    // Get chart context colors
+    let chartColor = '#c084fc';
+    if (filterType === 'Cuckoo') chartColor = '#38bdf8';
+    if (filterType === 'XOR') chartColor = '#34d399';
+
+    // 1. FPR vs n (fixed M, fixed param)
+    let nVals = [], nFPRs = [];
+    for (let i = 0.1; i <= 2.0; i += 0.1) {
+        let testN = baseN * i;
+        nVals.push(formatNumber(testN));
+        if (filterType === 'Bloom') {
+            let actualBPI = fixedM / testN;
+            nFPRs.push(Math.pow(1 - Math.exp(-fixedParam / actualBPI), fixedParam));
+        } else if (filterType === 'Cuckoo') {
+            let actualAlpha = 0.955; if (fixedParam===2) actualAlpha=0.84; else if (fixedParam===8) actualAlpha=0.98;
+            let actualF = (fixedM * actualAlpha) / testN;
+            nFPRs.push((2 * fixedParam) / Math.pow(2, actualF));
+        } else if (filterType === 'XOR') {
+            let actualF = fixedM / (1.23 * testN);
+            nFPRs.push(Math.pow(2, -actualF));
+        }
+    }
+    
+    // 2. FPR vs m (fixed N, fixed param)
+    let mVals = [], mFPRs = [];
+    for (let i = 0.5; i <= 3.0; i += 0.25) {
+        let testM = fixedM * i;
+        mVals.push(formatBytes(testM));
+        if (filterType === 'Bloom') {
+            let actualBPI = testM / baseN;
+            mFPRs.push(Math.pow(1 - Math.exp(-fixedParam / actualBPI), fixedParam));
+        } else if (filterType === 'Cuckoo') {
+            let actualAlpha = 0.955; if (fixedParam===2) actualAlpha=0.84; else if (fixedParam===8) actualAlpha=0.98;
+            let actualF = (testM * actualAlpha) / baseN;
+            mFPRs.push((2 * fixedParam) / Math.pow(2, actualF));
+        } else if (filterType === 'XOR') {
+            let actualF = testM / (1.23 * baseN);
+            mFPRs.push(Math.pow(2, -actualF));
+        }
+    }
+    
+    // 3. FPR vs param (fixed N, fixed M)
+    let pVals = [], pFPRs = [];
+    let bpi = fixedM / baseN;
+    if (filterType === 'Bloom') {
+        for (let k = 1; k <= 20; k++) {
+            pVals.push(k);
+            pFPRs.push(Math.pow(1 - Math.exp(-k / bpi), k));
+        }
+    } else if (filterType === 'Cuckoo') {
+        [2, 4, 8].forEach(b => {
+            pVals.push(b);
+            let alpha = 0.955; if (b===2) alpha=0.84; else if (b===8) alpha=0.98;
+            let f = bpi * alpha;
+            pFPRs.push((2 * b) / Math.pow(2, f));
+        });
+    } else if (filterType === 'XOR') {
+        [8, 16, 32].forEach(f => {
+            pVals.push(f);
+            // XOR ignores baseM here because f directly sets memory and FPR
+            pFPRs.push(Math.pow(2, -f));
+        });
+    }
+
+    // Draw Chart 1
+    if (detailNChart) detailNChart.destroy();
+    detailNChart = new Chart(document.getElementById('detail-n-chart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: nVals,
+            datasets: [{ data: nFPRs, borderColor: chartColor, backgroundColor: chartColor, borderWidth: 2, pointRadius: 2, tension: 0.1 }]
+        },
+        options: commonOptions
+    });
+    
+    // Draw Chart 2
+    if (detailMChart) detailMChart.destroy();
+    detailMChart = new Chart(document.getElementById('detail-m-chart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: mVals,
+            datasets: [{ data: mFPRs, borderColor: chartColor, backgroundColor: chartColor, borderWidth: 2, pointRadius: 2, tension: 0.1 }]
+        },
+        options: commonOptions
+    });
+    
+    // Draw Chart 3
+    if (detailParamChart) detailParamChart.destroy();
+    detailParamChart = new Chart(document.getElementById('detail-param-chart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: pVals,
+            datasets: [{ data: pFPRs, borderColor: chartColor, backgroundColor: chartColor, borderWidth: 2, pointRadius: 3, tension: 0.1 }]
+        },
+        options: commonOptions
+    });
+}
 
 // Initial
 updateUI();
